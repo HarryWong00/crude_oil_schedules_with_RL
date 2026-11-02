@@ -1,0 +1,63 @@
+version: 1
+project: crude_oil_schedules_with_RL
+updated: 2026-11-02
+
+specs:
+  - id: env-core
+    title: 调度环境核心
+    goal: 10 个储罐 + 3 座蒸馏塔的离散事件推进，非法动作被拒绝而不是让状态失稳
+    code:
+      - "*/env.py"
+    api: [reset, step, refine, charge, isSecureState, render]
+    acceptance:
+      - reset() 返回长度 14 的状态向量（3 塔完成率 + 10 罐液位 + 当前时间）
+      - 罐存量始终落在 [0, 容量] 内，超限动作被拒绝
+      - 同一储罐在同一时刻不同时充、放（互斥）
+      - isSecureState() 对上述两条返回布尔判定
+    status: active
+
+  - id: action-space
+    title: 动作空间与蒸馏塔/储罐选择
+    goal: 动作可解码为「选塔 → 选罐 → 给速率」三元组，速率落在物理可行区间
+    code:
+      - "*/env.py"
+    api: [selectDistiller, selectTank, charge]
+    acceptance:
+      - selectDistiller(type) 只返回该炼油类型可用的塔
+      - selectTank(type, distiller) 只返回存有匹配原油的罐
+      - 非法三元组返回空选择，不改变内部状态
+    status: active
+
+  - id: rl-train
+    title: PPO / SAC 训练流程
+    goal: 单次实验可复现：固定随机种子、落盘超参与日志、产出可评估的 checkpoint
+    code:
+      - "*/train.py"
+      - "*/PPO.py"
+      - "*/run.py"
+    acceptance:
+      - 每次训练写入独立目录（NN-ALGO-MMDD-配置），不覆盖历史
+      - 训练结束产出 checkpoint 与 episode 回报曲线
+      - 相同种子两次训练的首个 episode 回报一致
+    status: active
+
+  - id: eval-report
+    title: 评估与出图
+    goal: 从 checkpoint 回放一条完整 10 天调度，输出成本、违约与甘特图
+    code:
+      - "*/test.py"
+    acceptance:
+      - 回放全程违反安全约束的时刻数为 0
+      - 输出总成本与各分项（滞期、罐存、切罐次数）
+      - 甘特图可对应到「塔 / 罐 / 时段」三元组
+    status: draft
+
+  - id: benchmark
+    title: 基准算例与对比
+    goal: 与 MILP/MINLP 基线在同一算例上比较求解时间与目标值
+    code:
+      - "*/test.py"
+    acceptance:
+      - 同一算例下 RL 与基线的目标值口径一致
+      - 记录求解时间，允许 RL 推理与基线求解并列对比
+    status: draft

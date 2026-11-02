@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "project": "crude_oil_schedules_with_RL",
+  "summary": "基于强化学习（PPO / SAC）的原油短期调度多目标优化",
+  "agents": [
+    {
+      "id": "env",
+      "name": "Environment Agent",
+      "role": "维护调度环境：10 个储罐 / 3 座蒸馏塔的状态推进、动作合法性与安全约束",
+      "files": ["*/env.py", "*/schedule.py"],
+      "interface": ["Env.reset", "Env.step", "Env.isSecureState", "Env.refine", "Env.charge"],
+      "state_dim": 14,
+      "guardrails": [
+        "reset() 必须返回 14 维状态：3 塔完成率 + 10 罐液位 + 1 当前时间",
+        "step() 内部先校验动作，再推进 refine / charge",
+        "任何动力学改动后跑一次 isSecureState() 自检"
+      ]
+    },
+    {
+      "id": "train",
+      "name": "Training Agent",
+      "role": "PPO / SAC 训练循环、超参、日志与 checkpoint 管理",
+      "files": ["*/train.py", "*/PPO.py", "*/run.py", "*/PPO_logs", "*/PPO_preTrained"],
+      "guardrails": [
+        "一次训练只写一个实验目录，不覆盖历史 run",
+        "checkpoint 与日志留在本地，不入库"
+      ]
+    },
+    {
+      "id": "eval",
+      "name": "Evaluation Agent",
+      "role": "策略回放、指标汇总、调度甘特与曲线出图",
+      "files": ["*/test.py"],
+      "guardrails": [
+        "评估只读 checkpoint，不写回训练目录"
+      ]
+    }
+  ],
+  "routing": [
+    { "when": "改环境动力学、动作空间或约束", "agent": "env" },
+    { "when": "改算法、奖励、超参或训练循环", "agent": "train" },
+    { "when": "只跑评估、对比或出图", "agent": "eval" }
+  ]
+}
